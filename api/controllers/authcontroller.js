@@ -210,12 +210,15 @@ exports.uploadPersonalPhoto = asyncHandler(async (req, res) => {
             return res.status(403).json({ error: 'يجب توثيق البريد الإلكتروني أولاً' });
         }
 
-        // 3. رفع الملفات من الذاكرة إلى Cloudinary
+        // 🆕 3. تحديد مسار Cloudinary الخاص بالمستخدم
+        const cloudinaryFolder = `24/decomunt`; // تقدر تخليه ديناميكي كمان مثلاً: `${user._id}/documents`
+
+        // 4. رفع الملفات من الذاكرة إلى Cloudinary
         const uploadPromises = req.files.map((file) => {
             return new Promise((resolve, reject) => {
                 cloudinary.uploader.upload_stream(
                     {
-                        folder: 'identity_documents',
+                        folder: cloudinaryFolder,
                         resource_type: 'auto',
                     },
                     (error, result) => {
@@ -231,13 +234,14 @@ exports.uploadPersonalPhoto = asyncHandler(async (req, res) => {
 
         const uploadedUrls = await Promise.all(uploadPromises);
 
-        // 4. تحديث بيانات المستخدم
+        // 5. تحديث بيانات المستخدم
         user.PersonalPhoto = [...user.PersonalPhoto, ...uploadedUrls];
         await user.save();
 
-        // 5. إرسال الاستجابة
+        // 6. إرسال الاستجابة
         res.status(200).json({
             message: `تم رفع ${uploadedUrls.length} صورة بنجاح`,
+            urls: uploadedUrls,
         });
 
     } catch (error) {
@@ -248,6 +252,7 @@ exports.uploadPersonalPhoto = asyncHandler(async (req, res) => {
         });
     }
 });
+
 
 /**
  * @desc    تسجيل دخول المستخدم
