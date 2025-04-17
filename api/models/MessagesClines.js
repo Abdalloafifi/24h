@@ -10,18 +10,21 @@ const messageSchema = new mongoose.Schema(
     receiverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
-    text: {
-      type: String,
-    },
+    text: String,
     image: [String],
     video: [String],
     audio: [String],
-
+    isAnswered: {
+      type: Boolean,
+      default: false,
+    },
+    parentMessage: { // إضافة حقل للربط بالرسالة الأصلية
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+    },
   },
   { timestamps: true }
 );
 
-const Message = mongoose.model("Message", messageSchema);
-module.exports = Message;
+module.exports = mongoose.model("Message", messageSchema);

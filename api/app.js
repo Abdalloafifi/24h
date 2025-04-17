@@ -9,11 +9,11 @@ const { errorNotFound, errorHandler } = require('./middlewares/error');
 require("dotenv").config();
 const conectet = require('./config/conectet');
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
-var authRouter = require('./routes/auth');
 
-var profileRouter = require('./routes/profile')
+var authRouter = require('./routes/auth');
+var profileRouter = require('./routes/profile');
+const messageRouter = require('./routes/messageRoutes');
+const AdminRouter=require("./routes/adminRoutes")
 
 
 var app = express();
@@ -32,10 +32,11 @@ app.use(securityMiddleware);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
-app.use('/users', usersRouter);
+
 app.use('/api/user', profileRouter);
+app.use('/auth', authRouter);
+app.use('/api/message', messageRouter);
+app.use('/api/admin',AdminRouter)
 
 
 

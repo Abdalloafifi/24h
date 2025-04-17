@@ -1,141 +1,227 @@
-const User = require("../models/User");
 const Message = require("../models/MessagesClines");
 const asyncHandler = require("express-async-handler");
 const xss = require("xss");
 const cloudinary = require("../config/cloudinary");
-const mongoose = require("mongoose");
-const { getReceiverSocketId, getIO } = require("../socket"); // استيراد io والدالة الخاصة بالـ socket
+const { getReceiverSocketId, getIO } = require("../socket");
 
-if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET غير موجود في المتغيرات البيئية");
-}
-  
+// Middlewares
+const isDoctor = (req, res, next) => {
+  if (req.user.UserType !== "nurse") {
+    return res.status(403).json({ message: "صلاحيات غير كافية" });
+  }
+  next();
+};
 
-
-
-
-/**
- * @desc   get all users
- * @route  GET /api/messager/allusers
- * @access  عام
- */
-exports.getAllUsers = asyncHandler(async (req, res) => {
-    const users = await User.find({ UserType:"nurse" }).select(
-      "-password -email"
-    );
-    // التحقق من عدم وجود مستخدمين في المصفوفة
-    if (users.length === 0) {
-      return res.status(400).json({ message: " لا يوجد مستخدمين" });
-    }
-    res.status(200).json(users);
-  });
-
+const isPatient = (req, res, next) => {
+  if (req.user.UserType !== "sick") {
+    return res.status(403).json({ message: "صلاحيات غير كافية" });
+  }
+  next();
+};
 
 /**
- * @desc   get messages-chat
- * @route  GET /api/messager/messages/:id
- * @access  خاص
+ * @route   GET /api/messages/patient
+ * @desc    جلب كل محادثات المريض مع الردود
+ * @access  Private (sick)
  */
-exports.getMessages = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+exports.getPatientMessages = [
+  isPatient,
+  asyncHandler(async (req, res) => {
     const messages = await Message.find({
-        $or: [
-          { senderId: req.user._id, receiverId: id },
-          { senderId: id, receiverId: req.user._id },
-        ],
-      })
-      .sort({ createdAt: 1 })
+      $or: [
+        { senderId: req.user._id },
+        { receiverId: req.user._id },
+      ],
+    })
+      .sort({ createdAt: -1 })
       .populate("senderId", "username avatar")
       .populate("receiverId", "username avatar");
-  
-    // if (messages.length === 0) {
-    //   return res.status(400).json({ message: "لا يوجد رسائل" });
-    // }
-  console.log(messages.length);
-    res.status(200).json(messages);
-  });
-  
 
+    res.status(200).json(messages);
+  }),
+];
+/**
+ * @route   POST /api/messages/questions
+ * @desc    المريض يرسل سؤال جديد مع إمكانية إرفاق ملفات
+ * @access  Private (sick)
+ */
+exports.sendQuestion = [
+  isPatient,
+  asyncHandler(async (req, res) => {
+    const { text } = req.body;
+    const sanitizedText = text ? xss(text) : undefined;
+
+    const newMessage = {
+      senderId: req.user._id,
+      text: sanitizedText,
+    };
+
+    // معالجة المرفقات
+    if (req.files?.length > 0) {
+      const uploaded = await Promise.all(
+        req.files.map((file) => {
+          return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              { folder: "clinic/messages", resource_type: "auto" },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve({
+                  url: result.secure_url,
+                  type: file.mimetype.split("/")[0]
+                });
+              }
+            );
+            uploadStream.end(file.buffer);
+          });
+        })
+      );
+
+      uploaded.forEach(({ url, type }) => {
+        switch (type) {
+          case "image":
+            newMessage.image = newMessage.image || [];
+            newMessage.image.push(url);
+            break;
+          case "video":
+            newMessage.video = newMessage.video || [];
+            newMessage.video.push(url);
+            break;
+          case "audio":
+            newMessage.audio = newMessage.audio || [];
+            newMessage.audio.push(url);
+            break;
+        }
+      });
+    }
+
+    const createdMessage = await Message.create(newMessage);
+    
+    // إرسال إشعار لجميع الأطباء
+    const io = getIO();
+    const populatedMessage = await Message.populate(createdMessage, {
+      path: "senderId",
+      select: "username avatar",
+    });
+    
+    io.emit("new_question", populatedMessage);
+
+    res.status(201).json(populatedMessage);
+  }),
+];
 
 /**
- * @desc   send message text or image or video or audio
- * @route  POST /api/messager/sendmessage/:id
- * @access  خاص
+ * @route   GET /api/messages/questions/unanswered
+ * @desc    جلب جميع الأسئلة غير المجابة للأطباء
+ * @access  Private (nurse)
  */
-exports.sendMessage = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { text } = req.body;
+exports.getUnansweredQuestions = [
+  isDoctor,
+  asyncHandler(async (req, res) => {
+    const questions = await Message.find({ isAnswered: false })
+      .sort({ createdAt: 1 })
+      .populate("senderId", "username avatar");
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: "معرّف مستلم غير صالح" });
-  }
+    res.status(200).json(questions);
+  }),
+];
 
-  const receiver = await User.findById(id);
-  if (!receiver) {
-    return res.status(404).json({ message: "المستلم غير موجود" });
-  }
+/**
+ * @route   PATCH /api/messages/questions/:messageId/lock
+ * @desc    قفل السؤال عند بدء الطبيب بالرد
+ * @access  Private (nurse)
+ */
+exports.startReply = [
+  isDoctor,
+  asyncHandler(async (req, res) => {
+    const { messageId } = req.params;
 
-  const sanitizedText = text ? xss(text) : undefined;
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      { $set: { isAnswered: true } },
+      { new: true }
+    );
 
-  const newMessage = {
-    senderId: req.user._id,
-    receiverId: id,
-    text: sanitizedText,
-  };
+    if (!message) {
+      return res.status(404).json({ message: "الرسالة غير موجودة" });
+    }
 
-  // ✅ رفع الملفات لو موجودة
-  if (req.files && req.files.length > 0) {
-    const uploaded = await Promise.all(req.files.map((file) => {
-      return new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          { folder: "24h/messages", resource_type: "auto" },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve({ url: result.secure_url, type: file.mimetype.split('/')[0] });
-          }
-        );
-        uploadStream.end(file.buffer);
-      });
-    }));
+    // إخفاء السؤال من قوائم الأطباء الآخرين
+    const io = getIO();
+    io.emit("question_locked", messageId);
 
-    uploaded.forEach(({ url, type }) => {
-      switch (type) {
-        case 'image':
-          if (!newMessage.image) newMessage.image = [];
-          newMessage.image.push(url);
-          break;
-        case 'video':
-          if (!newMessage.video) newMessage.video = [];
-          newMessage.video.push(url);
-          break;
-        case 'audio':
-          if (!newMessage.audio) newMessage.audio = [];
-          newMessage.audio.push(url);
-          break;
-      }
-    });
-  }
+    res.status(200).json({ message: "بدأت عملية الرد" });
+  }),
+];
 
-  if (!newMessage.text && !newMessage.image && !newMessage.video && !newMessage.audio) {
-    return res.status(400).json({ message: "الرسالة لا تحتوي على محتوى" });
-  }
+/**
+ * @route   POST /api/messages/questions/:messageId/reply
+ * @desc    الطبيب يرسل الرد النهائي على سؤال مع إمكانية إرفاق ملفات
+ * @access  Private (nurse)
+ */
+exports.submitReply = [
+  isDoctor,
+  asyncHandler(async (req, res) => {
+    const { messageId } = req.params;
+    const { text } = req.body;
 
-  const createdMessage = await Message.create(newMessage);
-  const populatedMessage = await Message.findById(createdMessage._id)
-    .populate("senderId", "username avatar")
-    .populate("receiverId", "username avatar");
+    const originalMessage = await Message.findById(messageId);
+    if (!originalMessage) {
+      return res.status(404).json({ message: "الرسالة الأصلية غير موجودة" });
+    }
 
-  // 🔁 إرسال الرسالة للطرفين بالسوكيت
-  const io = getIO();
-  const receiverSocketId = getReceiverSocketId(receiver._id.toString());
-  if (receiverSocketId) {
-    io.to(receiverSocketId).emit("newMessage", populatedMessage);
-  }
-
-  const senderSocketId = getReceiverSocketId(req.user._id.toString());
-  if (senderSocketId) {
-    io.to(senderSocketId).emit("newMessage", populatedMessage);
-  }
-
-  res.status(201).json(populatedMessage);
+  // داخل exports.submitReply…
+const reply = new Message({
+  senderId: req.user._id,
+  receiverId: originalMessage.senderId,
+  text: text ? xss(text) : undefined,
+  parentMessage: messageId,
 });
+
+// معالجة المرفقات بنفس الطريقة، لكن على reply
+if (req.files?.length > 0) {
+  const uploaded = await Promise.all(
+    req.files.map(file => {
+      // … رفع الملف
+    })
+  );
+
+  uploaded.forEach(({ url, type }) => {
+    switch (type) {
+      case "image":
+        reply.image = reply.image || [];
+        reply.image.push(url);
+        break;
+      case "video":
+        reply.video = reply.video || [];
+        reply.video.push(url);
+        break;
+      case "audio":
+        reply.audio = reply.audio || [];
+        reply.audio.push(url);
+        break;
+    }
+  });
+}
+
+// بعد إضافة الوسائط إلى reply
+const savedReply = await reply.save();
+
+    
+    // إرسال الإشعارات
+    const io = getIO();
+    
+    // للمريض
+    const patientSocketId = getReceiverSocketId(originalMessage.senderId);
+    if (patientSocketId) {
+      io.to(patientSocketId).emit("new_reply", savedReply);
+    }
+
+    // تحديث الرسالة الأصلية
+    await Message.findByIdAndUpdate(messageId, {
+      $push: { replies: savedReply._id },
+    });
+
+    res.status(201).json(savedReply);
+  }),
+];
+
