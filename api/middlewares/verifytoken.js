@@ -25,7 +25,7 @@ const decryptToken = (encryptedToken) => {
 };
 
 const verifyToken = async (req, res, next) => {
-    const encryptedToken = req.headers['x-auth-token'];
+    const encryptedToken = req.headers['auth-token'];
 
     if (!encryptedToken) {
         return res.status(403).json({ message: 'Token is required' });
@@ -42,14 +42,17 @@ const verifyToken = async (req, res, next) => {
             return res.status(401).json({ message: 'Invalid token structure' });
         }
 
-        req.user = await User.findById(decoded.id).select('-password -email');
-        if (!req.user) {
-            return res.status(401).json({ message: 'User not found' });
+        verift = await User.findById(decoded.id).select('-password ');
+        if (!verift) {
+            return res.status(403).json({ message: 'Unauthorized' });
         }
-
+        if (verift.role !== decoded.role  &&verift.email !== decoded.email ) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+        req.user = verift;
         next();
     } catch (error) {
-        return res.status(401).json({ message: 'Invalid or expired token' });
+        return res.status(403).json({ message: 'Invalid or expired token' });
     }
 };
 

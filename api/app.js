@@ -20,7 +20,13 @@ var app = express();
 
 conectet();
 
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'auth-token'],
+    exposedHeaders: ['auth-token']
+  }));
+
 const compression = require("compression")
 app.use(compression())
 
@@ -28,13 +34,13 @@ app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(securityMiddleware);
+// app.use(securityMiddleware);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 
 app.use('/api/user', profileRouter);
-app.use('/auth', authRouter);
+app.use('/api/auth', authRouter);
 app.use('/api/message', messageRouter);
 app.use('/api/admin',AdminRouter)
 

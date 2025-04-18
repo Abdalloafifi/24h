@@ -8,11 +8,8 @@ const nodemailer = require('nodemailer');
 const cloudinary = require("../config/cloudinary");
 
 
+
 const {generateTokenAndSend} = require('../middlewares/genarattokenandcookies');
-// التحقق من وجود المتغيرات البيئية
-if (!process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET غير موجود في المتغيرات البيئية');
-}
 
 
 
@@ -24,35 +21,24 @@ if (!process.env.JWT_SECRET) {
 
 exports.register = asyncHandler(async (req, res) => {
     const data = {
-        UserType: xss(req.body.UserType),
         username: xss(req.body.username?.trim()),
         email: xss(req.body.email?.trim()),
         password: xss(req.body.password),
         phone: xss(req.body.phone),
         NationalNumber: xss(req.body.NationalNumber),
     };
-
-    // التحقق من صحة البيانات
     const { error } = validateRegister(data);
     if (error) {
         return res.status(400).json({ error: error.details[0].message });
     }
-    console.log("aaaaaa")
-
-    // التحقق من وجود المستخدم
     const userExists = await User.findOne({ email: data.email });
     if (userExists) {
         return res.status(401).json({ error: 'المستخدم موجود بالفعل!' });
     }
-
-    // تشفير كلمة المرور
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(data.password, salt);
-    
+    const hashedPassword = await bcrypt.hash(data.password, salt);    
     const randamnumber = Math.floor(100000 + Math.random() * 900000);
-    // إنشاء مستخدم جديد
     const newUser = new User({
-        UserType: data.UserType,
         username: data.username,
         email: data.email,
         RealEmail:randamnumber,
@@ -62,15 +48,13 @@ exports.register = asyncHandler(async (req, res) => {
     });
 
     try {
- await newUser.save();
-
-        // إرسال الاستجابة
+        await newUser.save();
         
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
-            user: process.env.EMAIL,      // بريدك الإلكتروني
-            pass: process.env.PASSWORD    // كلمة مرور تطبيق جوجل (App Password)
+            user: process.env.EMAIL,     
+            pass: process.env.PASSWORD    
         }
     });
 
@@ -82,7 +66,7 @@ exports.register = asyncHandler(async (req, res) => {
     };
     try {
 
-        transporter.sendMail(mailOptions, function (error, info) {
+        await transporter.sendMail(mailOptions, function (error, info) {
             if (error) {
                 console.log(error);
             }
@@ -90,15 +74,13 @@ exports.register = asyncHandler(async (req, res) => {
                 console.log('Email sent: ' + info.response);
             }
         });
+        generateTokenAndSend(newUser, res);
         res.status(200).json({ message: "Email sent successfully" });
 
     } catch (err) {
         console.error('Error sending email:', err);
         res.status(500).json({ error: "Failed to send email" });
         }
-        // إرسال رمز التوثيق إلى البريد الإلكتروني  
-        generateTokenAndSend(user._id, res);
-
  
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -109,10 +91,6 @@ exports.register = asyncHandler(async (req, res) => {
 function validateRegister(data) {
     const schema = Joi.object({
         
-        UserType: Joi.string().required().messages({
-            'string.empty': 'نوع المستخدم مطلوب',
-            'any.required': 'نوع المستخدم مطلوب'
-        }),
         username: Joi.string().min(3).max(30).required().messages({
             'string.min': 'اسم المستخدم يجب أن يكون على الأقل 3 أحرف',
             'string.max': 'اسم المستخدم يجب ألا يتجاوز 30 حرفًا',
@@ -144,43 +122,34 @@ function validateRegister(data) {
  */
 exports.verifyEmail = asyncHandler(async (req, res) => {    
     const data = {
-        email: xss(req.body.email),
         code: xss(req.body.code)
     }
-    // التحقق من صحة البيانات
     const { error } = validateVerifyEmail(data);
     if (error) {
         return res.status(400).json({ error: error.details[0].message });
     }
 
-    // البحث عن المستخدم
-    const user = await User.findOne({ email: data.email });
+    const user = req.user
     if (!user) {
         return res.status(404).json({ error: 'المستخدم غير موجود!' });
     }
 
-    // التحقق من صحة الرمز
     if (user.RealEmail !== data.code) {
         return res.status(400).json({ error: 'الرمز غير صحيح!' });
     }
 
-    // تحديث حالة التوثيق
     user.documentation = true;
     await user.save();
 
 
+    generateTokenAndSend(user, res);
     res.status(200).json({ message: 'تم توثيق البريد الإلكتروني بنجاح!' });
-    generateTokenAndSend(user._id, res);
 
 });
     // دالة التحقق من صحة بيانات التحقق من البريد الإلكتروني
     
 function validateVerifyEmail(data) {
     const schema = Joi.object({
-        email: Joi.string().email().required().messages({
-            'string.email': 'البريد الإلكتروني غير صحيح',
-            'any.required': 'البريد الإلكتروني مطلوب'
-        }),
         code: Joi.string().required().messages({
             'any.required': 'الرمز مطلوب'
         })
@@ -188,70 +157,6 @@ function validateVerifyEmail(data) {
     return schema.validate(data);
 }
 
-/**
- * @desc    رفع مستندات |الصوره الشخصسه |صور الهويه
- * @route   POST /api/auth/uploadPersonalPhoto
- * @access  عام
- */
-exports.uploadPersonalPhoto = asyncHandler(async (req, res) => {
-    try {
-        // 1. التأكد من وجود ملفات
-        if (!req.files || req.files.length === 0) {
-            return res.status(400).json({ error: 'يجب رفع ملف واحد على الأقل' });
-        }
-
-        // 2. التحقق من المستخدم الموثق
-        const user = await User.findById(req.user._id);
-        if (!user) {
-            return res.status(404).json({ error: 'المستخدم غير موجود' });
-        }
-
-        if (!user.documentation) {
-            return res.status(403).json({ error: 'يجب توثيق البريد الإلكتروني أولاً' });
-        }
-
-        // 🆕 3. تحديد مسار Cloudinary الخاص بالمستخدم
-        const cloudinaryFolder = `24/decomunt`; // تقدر تخليه ديناميكي كمان مثلاً: `${user._id}/documents`
-
-        // 4. رفع الملفات من الذاكرة إلى Cloudinary
-        const uploadPromises = req.files.map((file) => {
-            return new Promise((resolve, reject) => {
-                cloudinary.uploader.upload_stream(
-                    {
-                        folder: cloudinaryFolder,
-                        resource_type: 'auto',
-                    },
-                    (error, result) => {
-                        if (error) {
-                            console.error('❌ فشل رفع الملف:', error);
-                            return reject(new Error(`فشل رفع الملف: ${file.originalname}`));
-                        }
-                        resolve(result.secure_url);
-                    }
-                ).end(file.buffer);
-            });
-        });
-
-        const uploadedUrls = await Promise.all(uploadPromises);
-
-        // 5. تحديث بيانات المستخدم
-        user.PersonalPhoto = [...user.PersonalPhoto, ...uploadedUrls];
-        await user.save();
-
-        // 6. إرسال الاستجابة
-        res.status(200).json({
-            message: `تم رفع ${uploadedUrls.length} صورة بنجاح`,
-            urls: uploadedUrls,
-        });
-
-    } catch (error) {
-        console.error('❌ خطأ أثناء الرفع:', error);
-        res.status(500).json({
-            error: error.message || 'فشل في رفع الملفات',
-            details: error.stack,
-        });
-    }
-});
 
 
 /**
@@ -265,7 +170,7 @@ exports.login = asyncHandler(async (req, res) => {
         const data = {
             email: xss(req.body.email),
             password: xss(req.body.password),
-            UserType: xss(req.body.UserType),
+            role: xss(req.body.role),
             phone: xss(req.body.phone),
         };
         console.log(req.body)
@@ -276,7 +181,7 @@ exports.login = asyncHandler(async (req, res) => {
 
         }
         // البحث عن المستخدم
-        const user = await User.findOne({  UserType: data.UserType ,email: data.email ,phone: data.phone });
+        const user = await User.findOne({$or: [{ email: data.email }, { phone: data.phone }]});
         if (!user) {
             return res.status(400).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة!' });
         }
@@ -286,7 +191,8 @@ exports.login = asyncHandler(async (req, res) => {
         if (!validPassword) {
             return res.status(400).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة!' });
         }
-        generateTokenAndSend(user._id, res);
+        // id ,email, role 
+    generateTokenAndSend(user, res);
 
         // إرسال الاستجابة
         res.status(200).json( user);
@@ -299,7 +205,7 @@ exports.login = asyncHandler(async (req, res) => {
 // دالة التحقق من صحة بيانات الدخول
 function validateLogin(data) {
     const schema = Joi.object({
-        UserType: Joi.string().required().messages({
+        role: Joi.string().required().messages({
             'string.empty': 'نوع المستخدم مطلوب',
             'any.required': 'نوع المستخدم مطلوب'
         }),
@@ -353,5 +259,73 @@ exports.logout = asyncHandler(async (req, res) => {
         res.status(200).json({ message: 'تم تسجيل الخروج بنجاح!' });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+
+
+
+
+
+
+/**
+ * @desc    رفع مستندات |الصوره الشخصسه |صور الهويه
+ * @route   POST /api/auth/uploadPersonalPhoto
+ * @access  عام
+ */
+exports.uploadPersonalPhoto = asyncHandler(async (req, res) => {
+    try {
+        // 1. التأكد من وجود ملفات
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ error: 'يجب رفع ملف واحد على الأقل' });
+        }
+
+        // 2. التحقق من المستخدم الموثق
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ error: 'المستخدم غير موجود' });
+        }
+
+        if (!user.documentation) {
+            return res.status(403).json({ error: 'يجب توثيق البريد الإلكتروني أولاً' });
+        }
+        const cloudinaryFolder = `users/${user._id}/documents`;
+        // 4. رفع الملفات من الذاكرة إلى Cloudinary
+        const uploadPromises = req.files.map((file) => {
+            return new Promise((resolve, reject) => {
+                cloudinary.uploader.upload_stream(
+                    {
+                        folder: cloudinaryFolder,
+                        resource_type: 'auto',
+                    },
+                    (error, result) => {
+                        if (error) {
+                            console.error('❌ فشل رفع الملف:', error);
+                            return reject(new Error(`فشل رفع الملف: ${file.originalname}`));
+                        }
+                        resolve(result.secure_url);
+                    }
+                ).end(file.buffer);
+            });
+        });
+
+        const uploadedUrls = await Promise.all(uploadPromises);
+
+        // 5. تحديث بيانات المستخدم
+        user.PersonalPhoto = [...user.PersonalPhoto, ...uploadedUrls];
+        await user.save();
+
+        // 6. إرسال الاستجابة
+        res.status(200).json({
+            message: `تم رفع ${uploadedUrls.length} صورة بنجاح`,
+            urls: uploadedUrls,
+        });
+
+    } catch (error) {
+        console.error('❌ خطأ أثناء الرفع:', error);
+        res.status(500).json({
+            error: error.message || 'فشل في رفع الملفات',
+            details: error.stack,
+        });
     }
 });

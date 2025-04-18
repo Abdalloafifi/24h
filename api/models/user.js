@@ -3,10 +3,10 @@ const { Schema } = mongoose;
 
 const UserSchema = new Schema(
     {
-        UserType: {
+        role: {
             type: String,
             enum: ["sick", "nurse"],
-            required: true,
+            default: "sick",
         },
         username: {
             type: String,
@@ -38,16 +38,17 @@ const UserSchema = new Schema(
             required: true,
             unique: true,
             trim: true,
-            match: /^[0-9]{14}$/, // تحقق من تنسيق الرقم الوطني (10 أرقام)
+            match: /^[0-9]{14}$/, // تحقق من تنسيق الرقم الوطني (14 أرقام)
         },
         password: {
             type: String,
             required: true,
         },
-
-        PersonalPhoto: [{
+        resetPasswordCode: {
             type: String,
-        }],
+            default: null,
+        },
+
         avatar: {
             type: String,
             default: "https://icon-library.com/images/avatar-icon-images/avatar-icon-images-4.jpg", // رابط الصورة الافتراضية
@@ -59,6 +60,14 @@ const UserSchema = new Schema(
         description: {
             type: String,
         },
+        
+        PersonalPhoto: [{
+            type: String,
+        }],
+        isAdmin: {
+            type: Boolean,
+            default: false,
+        }
 
 
 

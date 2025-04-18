@@ -4,16 +4,15 @@ const xss = require("xss");
 const cloudinary = require("../config/cloudinary");
 const { getReceiverSocketId, getIO } = require("../socket");
 
-// Middlewares
 const isDoctor = (req, res, next) => {
-  if (req.user.UserType !== "nurse") {
+  if (req.user.role !== "nurse") {
     return res.status(403).json({ message: "صلاحيات غير كافية" });
   }
   next();
 };
 
 const isPatient = (req, res, next) => {
-  if (req.user.UserType !== "sick") {
+  if (req.user.role !== "sick") {
     return res.status(403).json({ message: "صلاحيات غير كافية" });
   }
   next();
@@ -56,7 +55,6 @@ exports.sendQuestion = [
       text: sanitizedText,
     };
 
-    // معالجة المرفقات
     if (req.files?.length > 0) {
       const uploaded = await Promise.all(
         req.files.map((file) => {
@@ -96,7 +94,6 @@ exports.sendQuestion = [
 
     const createdMessage = await Message.create(newMessage);
     
-    // إرسال إشعار لجميع الأطباء
     const io = getIO();
     const populatedMessage = await Message.populate(createdMessage, {
       path: "senderId",
@@ -169,7 +166,6 @@ exports.submitReply = [
       return res.status(404).json({ message: "الرسالة الأصلية غير موجودة" });
     }
 
-  // داخل exports.submitReply…
 const reply = new Message({
   senderId: req.user._id,
   receiverId: originalMessage.senderId,
@@ -177,11 +173,22 @@ const reply = new Message({
   parentMessage: messageId,
 });
 
-// معالجة المرفقات بنفس الطريقة، لكن على reply
 if (req.files?.length > 0) {
   const uploaded = await Promise.all(
-    req.files.map(file => {
-      // … رفع الملف
+    req.files.map((file) => {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: "clinic/messages", resource_type: "auto" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve({
+              url: result.secure_url,
+              type: file.mimetype.split("/")[0]
+            });
+          }
+        );
+        uploadStream.end(file.buffer);
+      });
     })
   );
 
@@ -203,20 +210,16 @@ if (req.files?.length > 0) {
   });
 }
 
-// بعد إضافة الوسائط إلى reply
 const savedReply = await reply.save();
 
     
-    // إرسال الإشعارات
     const io = getIO();
     
-    // للمريض
     const patientSocketId = getReceiverSocketId(originalMessage.senderId);
     if (patientSocketId) {
       io.to(patientSocketId).emit("new_reply", savedReply);
     }
 
-    // تحديث الرسالة الأصلية
     await Message.findByIdAndUpdate(messageId, {
       $push: { replies: savedReply._id },
     });

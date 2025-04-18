@@ -7,7 +7,7 @@ const xss = require("xss");
 const Joi = require("joi");
 
 const {
-  genarateTokenAndCookies,
+  generateTokenAndSend,
 } = require("../middlewares/genarattokenandcookies");
 const cloudinary = require("../config/cloudinary"); // المسار الصحيح لملف cloudinary.js// التحقق من وجود المتغيرات البيئية
 if (!process.env.JWT_SECRET) {
@@ -34,12 +34,10 @@ exports.getUserProfile = asyncHandler(async (req, res) => {
  * @access  خاص
  */
 exports.updateUserProfile = asyncHandler(async (req, res) => {
-  let data = {};
-
-  if (req.body.phone) data.phone = xss(req.body.phone);
-  if (req.body.description) data.description = xss(req.body.description);
-
-  // التحقق من صحة البيانات فقط في حال وجود القيم
+  let data = {
+    phone : xss(req.body.phone),
+    description : xss(req.body.description),
+  };
   const { error } = viledUpdataProfile(data);
   if (error) {
     return res.status(400).json({ error: error.details[0].message });
@@ -54,16 +52,15 @@ exports.updateUserProfile = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "المستخدم غير موجود" });
   }
 
-  genarateTokenAndCookies(user._id, res);
+  generateTokenAndSend(user._id, res);
   res.status(200).json(user);
 });
 
-// تحديث التحقق من البيانات ليجعل الحقول اختيارية
 function viledUpdataProfile(data) {
   const schema = Joi.object({
-    phone: Joi.string().optional().required(),
-    description: Joi.string().optional().required(),
-  }).min(1); // تأكد من أن هناك على الأقل حقل واحد محدث
+    phone: Joi.string().optional(),
+    description: Joi.string().optional(),
+  }).min(1); 
 
   return schema.validate(data);
 }
@@ -78,18 +75,14 @@ exports.updateUserAvatar = asyncHandler(async (req, res) => {
     const userId = req.params.id;
     const file = req.file;
 
-    // التحقق من وجود الملف وكونه صورة
     if (!file || !file.mimetype.startsWith("image/")) {
       return res.status(400).json({ message: "يرجى تحميل صورة صالحة" });
     }
-
-    // البحث عن المستخدم والتحقق من الملكية
     const user = await User.findById(userId);
     if (!user || user._id.toString() !== req.user.id) {
       return res.status(403).json({ message: "غير مصرح بالتعديل" });
     }
 
-    // حذف الصورة القديمة إذا كانت موجودة
     if (user.avatar) {
       try {
         const publicId = user.avatar
@@ -103,7 +96,6 @@ exports.updateUserAvatar = asyncHandler(async (req, res) => {
       }
     }
 
-    // رفع الصورة الجديدة باستخدام buffer
     const result = await cloudinary.uploader.upload(
       `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
       {
@@ -115,7 +107,6 @@ exports.updateUserAvatar = asyncHandler(async (req, res) => {
       }
     );
 
-    // تحديث البيانات
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { avatar: result.secure_url },
