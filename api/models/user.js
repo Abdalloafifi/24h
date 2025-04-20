@@ -22,16 +22,31 @@ const UserSchema = new Schema(
         RealEmail: {
             type: String,
             required: true,
-            
+        },
+        okemail: {
+            type: Boolean,
+            default: false,
+        },
+        
+        phone: {
+            type: String,
+            required: true,
+            unique: true,
+            trim: true,
+            match: /^[0-9]{10}$/, // تحقق من تنسيق رقم الهاتف (12 أرقام)
+        },
+        RealPhone: {
+            type: String,
+            required: true,  
+        },
+        okphone: {
+            type: Boolean,
+            default: false,
         },
         documentation: {
             type: Boolean,
             default: false,
-        },
 
-        phone: {
-            type: String,
-            
         },
         NationalNumber: {
             type: String,
@@ -57,13 +72,17 @@ const UserSchema = new Schema(
             type: String,
 
         },
-        description: {
-            type: String,
-        },
         
         PersonalPhoto: [{
             type: String,
         }],
+        ChangePersonalPhoto: {
+            type: Boolean,
+            default: false,
+        },
+        description: {
+            type: String,
+        },
         isAdmin: {
             type: Boolean,
             default: false,

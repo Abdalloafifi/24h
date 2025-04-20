@@ -38,6 +38,7 @@ exports.register = asyncHandler(async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(data.password, salt);    
     const randamnumber = Math.floor(100000 + Math.random() * 900000);
+    
     const newUser = new User({
         username: data.username,
         email: data.email,
@@ -124,7 +125,7 @@ exports.verifyEmail = asyncHandler(async (req, res) => {
     const data = {
         code: xss(req.body.code)
     }
-    const { error } = validateVerifyEmail(data);
+    const { error } = validateVerifyEmailorphone(data);
     if (error) {
         return res.status(400).json({ error: error.details[0].message });
     }
@@ -138,7 +139,7 @@ exports.verifyEmail = asyncHandler(async (req, res) => {
         return res.status(400).json({ error: 'الرمز غير صحيح!' });
     }
 
-    user.documentation = true;
+    user.okemail = true;
     await user.save();
 
 
@@ -148,7 +149,7 @@ exports.verifyEmail = asyncHandler(async (req, res) => {
 });
     // دالة التحقق من صحة بيانات التحقق من البريد الإلكتروني
     
-function validateVerifyEmail(data) {
+function validateVerifyEmailorphone(data) {
     const schema = Joi.object({
         code: Joi.string().required().messages({
             'any.required': 'الرمز مطلوب'
@@ -156,7 +157,43 @@ function validateVerifyEmail(data) {
     });
     return schema.validate(data);
 }
+/**
+ * @desc    التحقق من  صحه رقم الهاتف
+ * @route   POST /api/auth/verifyPhone
+ * @access  عام
+ */
+exports.verifyPhone = asyncHandler(async (req, res) => {
+    const data = {
+        email: xss(req.body.email?.trim()),
+        code: xss(req.body.code)
+    }
+    const { error } = validateVerifyEmailorphone(data);
+    if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+    }
+    const user = await User.findOne({ email: data.email });
+    if (!user) {
+        return res.status(404).json({ error: 'المستخدم غير موجود!' });
+    }
 
+    if (user.RealPhone !== data.code) {
+        return res.status(400).json({ error: 'الرمز غير صحيح!' });
+    }
+
+    user.okphone = true;
+    
+    await user.save();
+    if (user.okemail && user.okphone) {
+        user.documentation = true;
+        await user.save();
+    }
+
+
+
+    generateTokenAndSend(user, res);
+    res.status(200).json({ message: 'تم توثيق رقم الهاتف بنجاح!' });
+});
+ 
 
 
 /**
@@ -313,6 +350,7 @@ exports.uploadPersonalPhoto = asyncHandler(async (req, res) => {
 
         // 5. تحديث بيانات المستخدم
         user.PersonalPhoto = [...user.PersonalPhoto, ...uploadedUrls];
+        user.ChangePersonalPhoto = true; // تعيين الحقل إلى true
         await user.save();
 
         // 6. إرسال الاستجابة

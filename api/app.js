@@ -13,7 +13,8 @@ const conectet = require('./config/conectet');
 var authRouter = require('./routes/auth');
 var profileRouter = require('./routes/profile');
 const messageRouter = require('./routes/messageRoutes');
-const AdminRouter=require("./routes/adminRoutes")
+const AdminRouter = require("./routes/adminRoutes")
+const categoryRouter = require('./routes/categoryRoutes');
 
 
 var app = express();
@@ -42,7 +43,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/user', profileRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/message', messageRouter);
-app.use('/api/admin',AdminRouter)
+app.use('/api/admin', AdminRouter)
+app.use('/api/categories', categoryRouter);
 
 
 
