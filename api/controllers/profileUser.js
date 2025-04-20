@@ -1,15 +1,10 @@
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const bcrypt = require("bcrypt");
 const asyncHandler = require("express-async-handler");
-const passwordComplexity = require("joi-password-complexity");
 const xss = require("xss");
 const Joi = require("joi");
+const {generateTokenAndSend,} = require("../middlewares/genarattokenandcookies");
+const cloudinary = require("../config/cloudinary"); 
 
-const {
-  generateTokenAndSend,
-} = require("../middlewares/genarattokenandcookies");
-const cloudinary = require("../config/cloudinary"); // المسار الصحيح لملف cloudinary.js// التحقق من وجود المتغيرات البيئية
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET غير موجود في المتغيرات البيئية");
 }

@@ -6,11 +6,7 @@ const xss = require('xss');
 const Joi = require('joi');
 const nodemailer = require('nodemailer');
 const cloudinary = require("../config/cloudinary");
-
-
-
 const {generateTokenAndSend} = require('../middlewares/genarattokenandcookies');
-
 
 
 /**
@@ -88,7 +84,6 @@ exports.register = asyncHandler(async (req, res) => {
     }
 });
 
-// دالة التحقق من صحة بيانات التسجيل
 function validateRegister(data) {
     const schema = Joi.object({
         
@@ -147,7 +142,6 @@ exports.verifyEmail = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'تم توثيق البريد الإلكتروني بنجاح!' });
 
 });
-    // دالة التحقق من صحة بيانات التحقق من البريد الإلكتروني
     
 function validateVerifyEmailorphone(data) {
     const schema = Joi.object({
@@ -194,7 +188,6 @@ exports.verifyPhone = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'تم توثيق رقم الهاتف بنجاح!' });
 });
  
-
 
 /**
  * @desc    تسجيل دخول المستخدم
@@ -272,16 +265,13 @@ exports.viledLogin = asyncHandler(async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        generateTokenAndSend(user._id, res);
-        
-
+        generateTokenAndSend(user, res);
         // إرسال الاستجابة
         res.status(200).json(user)
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 })
-
 
 
 /**
