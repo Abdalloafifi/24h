@@ -6,12 +6,12 @@ const upload = require('../middlewares/uplod'); // هذا هو ملف multer
 
  
 router.post('/register', register);
-router.post('/verifyEmail', verifyToken, verifyEmail);
-router.post('/verifyPhone', verifyToken, verifyPhone);
+router.post('/verifyEmail', verifyEmail);
+router.post('/verifyPhone', verifyPhone);
 router.post('/login', login);
 router.post('/viledLogin',verifyToken,viledLogin);
 //logout router
-router.post('/logout', logout);
+router.post('/logout',verifyToken, logout);
 
 router.post(
     '/uploadPersonalPhoto', verifyToken,upload.array('files'), uploadPersonalPhoto);

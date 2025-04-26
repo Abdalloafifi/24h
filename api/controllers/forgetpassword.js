@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const {User, complexityOptions} = require('../models/User');
 const bcrypt = require('bcrypt');
 const asyncHandler = require('express-async-handler');
 const passwordComplexity = require("joi-password-complexity");
@@ -109,9 +109,9 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 });
 
 
+
 function validateResetPassword(data) {
     const schema = Joi.object({
-        password: passwordComplexity().required()
-    });
+          password: passwordComplexity(complexityOptions).required()    });
     return schema.validate(data);
 }

@@ -1,4 +1,4 @@
-const { category, vildateCategory } = require('../models/category');
+const category  = require('../models/category');
 const asyncHandler = require('express-async-handler');
 const xss = require("xss");
 
@@ -12,7 +12,7 @@ const xss = require("xss");
 exports.createCategory = asyncHandler(async (req, res) => {
     try {
         const data = {
-            text: xss(req.body.text),
+            status: xss(req.body.status),
             price: xss(req.body.price)
 
         }
@@ -20,9 +20,9 @@ exports.createCategory = asyncHandler(async (req, res) => {
         if (error) return res.status(400).json({ error: error.details[0].message });
 
         const newCategory = new category({
-            text: data.text,
+            status: data.status,
             price: data.price,
-            user : req.user.id
+            user: req.user.id
         });
         await newCategory.save();
 

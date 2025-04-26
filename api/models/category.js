@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 //category schema
 const categorySchema = new mongoose.Schema({
-    text: {
+    status: {
         type: String,
         required: true,
         trim: true,
@@ -21,4 +21,4 @@ const categorySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const category = mongoose.model('category', categorySchema);
-module.exports = { category,  };
+module.exports = category;

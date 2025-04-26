@@ -49,6 +49,9 @@ const verifyToken = async (req, res, next) => {
         if (verift.role !== decoded.role  &&verift.email !== decoded.email ) {
             return res.status(401).json({ message: 'Unauthorized' });
         }
+        if(verift.documentation === false){
+            return res.status(401).json({ message: 'You have an account but it is not verified. Complete the remaining steps.' });
+        }
         req.user = verift;
         next();
     } catch (error) {

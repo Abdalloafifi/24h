@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Order = require('../models/order');
 const asyncHandler = require("express-async-handler");
 const xss = require("xss");
 const Joi = require("joi");
@@ -114,3 +115,21 @@ exports.updateUserAvatar = asyncHandler(async (req, res) => {
     res.status(500).json({ message: "فشل في تحديث الصورة" });
   }
 });
+
+/**
+ * @desc    get user orders
+ * @route   GET /api/user/orders/:id
+ * @access  خاص
+ */
+exports.getUserOrders = asyncHandler(async (req, res) => {
+  try {
+    const orders = await Order.find({ $or: [{ user: req.params.id }, { doctor: req.params.id }] });
+    if (!orders) {
+      return res.status(404).json({ message: "لا توجد طلبات" });
+    }
+    res.status(200).json(orders);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+);

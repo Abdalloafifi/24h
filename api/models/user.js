@@ -33,7 +33,7 @@ const UserSchema = new Schema(
             required: true,
             unique: true,
             trim: true,
-            match: /^[0-9]{10}$/, // تحقق من تنسيق رقم الهاتف (12 أرقام)
+            match: /^[0-9]{11}$/, // تحقق من تنسيق رقم الهاتف (12 أرقام)
         },
         RealPhone: {
             type: String,
@@ -86,12 +86,35 @@ const UserSchema = new Schema(
         isAdmin: {
             type: Boolean,
             default: false,
-        }
+        },
+        location: {
+            type: {
+                type: String,
+                enum: ['Point'],
+            },
+            coordinates: {
+                type: [Number],
+            }
+        },
+balance: {
+    type: Number,
+    default: 0,
+    min: 0,
+},
 
 
 
     },
     { timestamps: true }
 );
+UserSchema.index({ location: '2dsphere' });
+const complexityOptions = {
+    min: 8,
+    max: 30,
+    lowerCase: 1,
+    upperCase: 1,
+    numeric: 1,
+  };
+
 const User = mongoose.model("User", UserSchema);
-module.exports = User;
+module.exports = { User, complexityOptions };

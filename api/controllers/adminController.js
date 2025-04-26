@@ -1,13 +1,14 @@
 const User = require('../models/User');
 const Message = require("../models/MessagesClines");
+const order = require('../models/order');
+const Payment = require("../models/payment");
+
 const xss = require('xss');
 const nodemailer = require('nodemailer');
 
 const asyncHandler = require('express-async-handler');
 
-if (!process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET غير موجود في المتغيرات البيئية');
-}
+
 
 
 
@@ -46,7 +47,7 @@ exports.ChangeAccountTypeAccept = asyncHandler(async (req, res) => {
             subject: 'User Account Type Changed',
             text: `Your account type has been changed to ${user.role}.`,
         };
-        transporter.sendMail(mailOptions, (error, info) => {
+        await transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
                 console.log(error);
                 return res.status(500).json({
@@ -111,10 +112,24 @@ exports.getAlldata = asyncHandler(async (req, res) => {
                 { receiverId: req.body.id }
             ]
         }).populate('senderId receiverId')
-        .sort({ createdAt: -1 });
-        res.status(200).json(allMessagesUser);
-
+            .sort({ createdAt: -1 });
+        const allOrders = await order.find({
+            $or: [
+                { user: req.body.id },
+                { doctor: req.body.id }
+            ]
+        })
+            .sort({ createdAt: -1 });
+        const allPayments = await Payment.find({
+            $or: [
+                { user: req.body.id },
+                { receiver: req.body.id }
+            ]
+        })
+            .sort({ createdAt: -1 });
+        res.status(200).json({ allMessagesUser, allOrders, allPayments });
         
+
     } catch (error) {
         res.status(500).json({ error: error.message });
         

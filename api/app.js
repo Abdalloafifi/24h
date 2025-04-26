@@ -13,8 +13,11 @@ const conectet = require('./config/conectet');
 var authRouter = require('./routes/auth');
 var profileRouter = require('./routes/profile');
 const messageRouter = require('./routes/messageRoutes');
+const orderRouter = require('./routes/orderRouter');
 const AdminRouter = require("./routes/adminRoutes")
 const categoryRouter = require('./routes/categoryRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+
 
 
 var app = express();
@@ -43,8 +46,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/user', profileRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/message', messageRouter);
+app.use('/api/orders', orderRouter);
 app.use('/api/admin', AdminRouter)
 app.use('/api/categories', categoryRouter);
+app.use('/api/payment', paymentRoutes);
+
+
 
 
 

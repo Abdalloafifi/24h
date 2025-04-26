@@ -1,12 +1,13 @@
-const User = require('../models/User');
+const { User, complexityOptions } = require('../models/User');
 const bcrypt = require('bcrypt');
 const asyncHandler = require('express-async-handler');
 const passwordComplexity = require("joi-password-complexity");
 const xss = require('xss');
 const Joi = require('joi');
 const nodemailer = require('nodemailer');
+const { Vonage } = require('@vonage/server-sdk')
 const cloudinary = require("../config/cloudinary");
-const {generateTokenAndSend} = require('../middlewares/genarattokenandcookies');
+const { generateTokenAndSend } = require('../middlewares/genarattokenandcookies');
 
 
 /**
@@ -32,53 +33,77 @@ exports.register = asyncHandler(async (req, res) => {
         return res.status(401).json({ error: 'المستخدم موجود بالفعل!' });
     }
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(data.password, salt);    
+    const hashedPassword = await bcrypt.hash(data.password, salt);
     const randamnumber = Math.floor(100000 + Math.random() * 900000);
-    
+    const randamnumberPhone = Math.floor(100000 + Math.random() * 900000);
+
     const newUser = new User({
         username: data.username,
         email: data.email,
-        RealEmail:randamnumber,
+        RealEmail: randamnumber,
         password: hashedPassword,
         phone: data.phone,
+        RealPhone: randamnumberPhone,
         NationalNumber: data.NationalNumber,
     });
 
     try {
         await newUser.save();
-        
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.EMAIL,     
-            pass: process.env.PASSWORD    
-        }
-    });
 
-    const mailOptions = {
-        from: process.env.EMAIL,
-        to: data.email,
-        subject: 'Verify the email address',
-        text: `Since you received this message, this means that this email is correct and you can put the code in the correct place.: ${randamnumber}`,
-    };
-    try {
-
-        await transporter.sendMail(mailOptions, function (error, info) {
-            if (error) {
-                console.log(error);
-            }
-            else {
-                console.log('Email sent: ' + info.response);
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL,
+                pass: process.env.PASSWORD
             }
         });
-        generateTokenAndSend(newUser, res);
-        res.status(200).json({ message: "Email sent successfully" });
 
-    } catch (err) {
-        console.error('Error sending email:', err);
-        res.status(500).json({ error: "Failed to send email" });
+        const mailOptions = {
+            from: process.env.EMAIL,
+            to: data.email,
+            subject: 'Verify the email address',
+            text: `Since you received this message, this means that this email is correct and you can put the code in the correct place.: ${randamnumber}`,
+        };
+        try {
+
+            await transporter.sendMail(mailOptions, function (error, info) {
+                if (error) {
+                    console.log(error);
+                }
+                else {
+                    console.log('Email sent: ');
+                }
+            });
+            try {
+                // Send the verification code to the user's phone using Vonage API
+                const vonage = new Vonage({
+                    apiKey: process.env.VONAGE_API_KEY,
+                    apiSecret: process.env.VONAGE_API_SECRET,
+                });
+
+                const from = "24h"  // nema ( if contry suuport nema) or number 
+                const to = data.phone.startsWith('+')
+                    ? data.phone
+                    : '20' + data.phone.replace(/^0+/, '');
+                const text = `  this phone number is correct and you can put the code in the correct place.: ${randamnumberPhone}`
+
+                async function sendSMS() {
+                    await vonage.sms.send({ to, from, text })
+                        .then(resp => { console.log('Message sent successfully'); })
+                        .catch(err => { console.log('There was an error sending the messages.'); console.error(err); });
+                }
+                await sendSMS();
+            } catch (error) {
+                console.error('Error sending email:', error);
+                res.status(500).json({ error: "Failed to send email" });
+            }
+            res.status(200).json({ message: "Email sent successfully" });
+
+        } catch (err) {
+            console.error('Error sending email:', err);
+            res.status(500).json({ error: "Failed to send email" });
         }
- 
+
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -86,7 +111,7 @@ exports.register = asyncHandler(async (req, res) => {
 
 function validateRegister(data) {
     const schema = Joi.object({
-        
+
         username: Joi.string().min(3).max(30).required().messages({
             'string.min': 'اسم المستخدم يجب أن يكون على الأقل 3 أحرف',
             'string.max': 'اسم المستخدم يجب ألا يتجاوز 30 حرفًا',
@@ -96,7 +121,7 @@ function validateRegister(data) {
             'string.email': 'البريد الإلكتروني غير صحيح',
             'any.required': 'البريد الإلكتروني مطلوب'
         }),
-        password: passwordComplexity().required().messages({
+        password: passwordComplexity(complexityOptions).required().messages({
             'any.required': 'كلمة المرور مطلوبة'
         }),
         phone: Joi.string().optional().messages({
@@ -116,7 +141,7 @@ function validateRegister(data) {
  * @route   POST /api/auth/verifyEmail
  * @access  عام
  */
-exports.verifyEmail = asyncHandler(async (req, res) => {    
+exports.verifyEmail = asyncHandler(async (req, res) => {
     const data = {
         code: xss(req.body.code)
     }
@@ -138,11 +163,10 @@ exports.verifyEmail = asyncHandler(async (req, res) => {
     await user.save();
 
 
-    generateTokenAndSend(user, res);
     res.status(200).json({ message: 'تم توثيق البريد الإلكتروني بنجاح!' });
 
 });
-    
+
 function validateVerifyEmailorphone(data) {
     const schema = Joi.object({
         code: Joi.string().required().messages({
@@ -175,7 +199,7 @@ exports.verifyPhone = asyncHandler(async (req, res) => {
     }
 
     user.okphone = true;
-    
+
     await user.save();
     if (user.okemail && user.okphone) {
         user.documentation = true;
@@ -187,7 +211,7 @@ exports.verifyPhone = asyncHandler(async (req, res) => {
     generateTokenAndSend(user, res);
     res.status(200).json({ message: 'تم توثيق رقم الهاتف بنجاح!' });
 });
- 
+
 
 /**
  * @desc    تسجيل دخول المستخدم
@@ -200,7 +224,6 @@ exports.login = asyncHandler(async (req, res) => {
         const data = {
             email: xss(req.body.email),
             password: xss(req.body.password),
-            role: xss(req.body.role),
             phone: xss(req.body.phone),
         };
         console.log(req.body)
@@ -211,7 +234,7 @@ exports.login = asyncHandler(async (req, res) => {
 
         }
         // البحث عن المستخدم
-        const user = await User.findOne({$or: [{ email: data.email }, { phone: data.phone }]});
+        const user = await User.findOne({ $or: [{ email: data.email }, { phone: data.phone }] });
         if (!user) {
             return res.status(400).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة!' });
         }
@@ -221,18 +244,19 @@ exports.login = asyncHandler(async (req, res) => {
         if (!validPassword) {
             return res.status(400).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة!' });
         }
+        // التحقق من حالة المستخدم
+        if (user.okemail &&user.okphone &&user.documentation === false) {
+            return res.status(401).json({ error:  'يجب توثيق الحساب أولاً' });
+        }
         // id ,email, role 
-    generateTokenAndSend(user, res);
+        generateTokenAndSend(user, res);
 
-        // إرسال الاستجابة
-        res.status(200).json( user);
+        res.status(200).json(user);
     } catch (error) {
         res.status(500).json({ error: error.message });
 
     }
 });
-
-// دالة التحقق من صحة بيانات الدخول
 function validateLogin(data) {
     const schema = Joi.object({
         role: Joi.string().required().messages({
@@ -266,13 +290,11 @@ exports.viledLogin = asyncHandler(async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
         generateTokenAndSend(user, res);
-        // إرسال الاستجابة
         res.status(200).json(user)
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 })
-
 
 /**
  * @desc    تسجيل خروج المستخدم
@@ -288,12 +310,6 @@ exports.logout = asyncHandler(async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
-
-
-
-
-
 
 /**
  * @desc    رفع مستندات |الصوره الشخصسه |صور الهويه
